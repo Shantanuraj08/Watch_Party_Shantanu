@@ -127,57 +127,79 @@ export default function Room() {
       }
     });
 
-    socket.on('play', (data: { currentTime?: number }) => {
-      console.log("[SYNC 4] PARTICIPANT RECEIVED:", performance.now());
-      console.log('Received play:', data);
+    socket.on('play', (data: { currentTime?: number; serverTimestamp?: number }) => {
+      const clientReceiveTime = Date.now();
+      const baseTime = typeof data?.currentTime === 'number' ? Math.max(0, data.currentTime) : 0;
+      let targetTime = baseTime;
+
+      if (typeof data?.serverTimestamp === 'number') {
+        const elapsedSec = Math.max(0, (clientReceiveTime - data.serverTimestamp) / 1000);
+        targetTime = baseTime + elapsedSec;
+      }
+
       const p = playerRef.current;
       if (p) {
-        if (typeof data?.currentTime === 'number' && typeof p.seekTo === 'function') {
-          p.seekTo(data.currentTime, true);
+        if (typeof p.seekTo === 'function') {
+          p.seekTo(targetTime, true);
         }
         p.playVideo?.();
       }
-      if (typeof data?.currentTime === 'number') {
-        setCurrentTime(data.currentTime);
-      }
+      setCurrentTime(targetTime);
       setIsPlaying(true);
     });
 
-    socket.on('pause', (data: { currentTime?: number }) => {
-      console.log('Received pause:', data);
+    socket.on('pause', (data: { currentTime?: number; serverTimestamp?: number }) => {
+      const targetTime = typeof data?.currentTime === 'number' ? Math.max(0, data.currentTime) : undefined;
+
       const p = playerRef.current;
       if (p) {
-        if (typeof data?.currentTime === 'number' && typeof p.seekTo === 'function') {
-          p.seekTo(data.currentTime, true);
+        if (typeof targetTime === 'number' && typeof p.seekTo === 'function') {
+          p.seekTo(targetTime, true);
         }
         p.pauseVideo?.();
       }
-      if (typeof data?.currentTime === 'number') {
-        setCurrentTime(data.currentTime);
+      if (typeof targetTime === 'number') {
+        setCurrentTime(targetTime);
       }
       setIsPlaying(false);
     });
 
-    socket.on('seek', (data: { time?: number }) => {
-      const time = data?.time;
-      console.log("[SEEK 4] PARTICIPANT RECEIVED:", performance.now(), time);
-      console.log('Received seek:', data);
+    socket.on('seek', (data: { time?: number; currentTime?: number; serverTimestamp?: number }) => {
+      const seekTime = typeof data?.currentTime === 'number' ? data.currentTime : data?.time;
+
       const p = playerRef.current;
-      if (typeof data?.time === 'number') {
-        p?.seekTo?.(data.time, true);
-        setCurrentTime(data.time);
+      if (typeof seekTime === 'number') {
+        const safeTime = Math.max(0, seekTime);
+        p?.seekTo?.(safeTime, true);
+        setCurrentTime(safeTime);
       }
     });
 
-    socket.on('change_video', (data: { videoId?: string }) => {
-      console.log('Received change_video:', data);
+    socket.on('change_video', (data: { videoId?: string; currentTime?: number; isPlaying?: boolean; serverTimestamp?: number }) => {
+      const clientReceiveTime = Date.now();
       if (data?.videoId && /^[a-zA-Z0-9_-]{11}$/.test(data.videoId)) {
+        const baseTime = typeof data.currentTime === 'number' ? Math.max(0, data.currentTime) : 0;
+        let targetTime = baseTime;
+        const shouldPlay = Boolean(data.isPlaying);
+
+        if (shouldPlay && typeof data.serverTimestamp === 'number') {
+          const elapsedSec = Math.max(0, (clientReceiveTime - data.serverTimestamp) / 1000);
+          targetTime = baseTime + elapsedSec;
+        }
+
         currentVideoIdRef.current = data.videoId;
         setVideoId(data.videoId);
-        setCurrentTime(0);
-        setIsPlaying(false);
-        if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
-          playerRef.current.loadVideoById(data.videoId);
+        setCurrentTime(targetTime);
+        setIsPlaying(shouldPlay);
+
+        const p = playerRef.current;
+        if (p && typeof p.loadVideoById === 'function') {
+          p.loadVideoById(data.videoId, targetTime);
+          if (shouldPlay) {
+            p.playVideo?.();
+          } else {
+            p.pauseVideo?.();
+          }
         }
       }
     });

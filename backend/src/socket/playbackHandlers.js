@@ -21,8 +21,11 @@ export const registerPlaybackHandlers = (socket, io) => {
         updateData.currentTime = currentTime;
       }
 
+      const serverTimestamp = Date.now();
+
       socket.to(socket.roomId).emit('play', {
         currentTime,
+        serverTimestamp,
       });
 
       try {
@@ -66,8 +69,11 @@ export const registerPlaybackHandlers = (socket, io) => {
         updateData.currentTime = currentTime;
       }
 
+      const serverTimestamp = Date.now();
+
       socket.to(socket.roomId).emit('pause', {
         currentTime,
+        serverTimestamp,
       });
 
       try {
@@ -107,8 +113,12 @@ export const registerPlaybackHandlers = (socket, io) => {
         return;
       }
 
+      const serverTimestamp = Date.now();
+
       socket.to(socket.roomId).emit('seek', {
         time,
+        currentTime: time,
+        serverTimestamp,
       });
 
       try {
@@ -150,8 +160,13 @@ export const registerPlaybackHandlers = (socket, io) => {
 
       const trimmedVideoId = videoId.trim();
 
+      const serverTimestamp = Date.now();
+
       socket.to(socket.roomId).emit('change_video', {
         videoId: trimmedVideoId,
+        currentTime: 0,
+        isPlaying: false,
+        serverTimestamp,
       });
 
       const updateData = {
